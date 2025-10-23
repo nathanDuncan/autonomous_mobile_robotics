@@ -19,7 +19,7 @@ n = 4
 m = 2
 
 # Set the simulation time [s] and the sample period [s]
-SIM_TIME = 20.0
+SIM_TIME = 10.0
 T = 0.04
 
 # Create an array of time values [s]
@@ -31,7 +31,7 @@ N = np.size(t)
 x_0_d = 0
 y_0_d = 0
 # desired velocity of the centre point (x,y)
-V_DES = 20/3.6      # [m/s] 
+V_DES = 20/3.6      # [m/s]
 # desired heading of the robot
 THETA_DES = np.pi/4 # [rad]
 # desired steering angle
@@ -51,25 +51,30 @@ for k in range(1, N):
     x_d[1, k] = x_d[1, 0] + V_DES * t[k] * np.sin(THETA_DES)
     x_d[2, k] = THETA_DES
     x_d[3, k] = PHI_DES
+    u_d[0, k] = V_F_DES
+    u_d[1, k] = 0
+
+print(f"[INFO] Desired start point: \n x_start: {x_d[0, 0]}\n y_start: {x_d[1, 0]} \n t_start: {x_d[2, 0]} \n p_start: {x_d[3, 0]} \n v_start: {V_DES}")
 
 ### VEHICLE SETUP ###
 # Set the track length of the vehicle
-ELL_T = 0.5 # [m]
-ELL_W = 1.5
+l = 1.5
+ELL_T = 1 # [m]
+ELL_W = 2*l
 
 # Create a vehicle of type FourSteer
-vehicle = FourWheelSteered(ELL_W, ELL_T)
+vehicle = FourWheelSteered(ELL_W, ELL_T, l)
 
 ### SIMULATE THE CLOSED-LOOP SYSTEM ###
 # initial conditions
-# q_0 = np.array([0, 0, 3*np.pi/2.0, 0])
-q_0 = np.array([0, 0, 0, 0])
+q_0 = np.array([0, 0, 3*np.pi/2.0, 0])
 
 # Setup some arrays
 x = np.zeros((n, N))
 u = np.zeros((m, N))
 x[:, 0] = q_0
 
+print(f"[INFO] Beginning simulation...")
 for k in range(1, N):
     # Simulate the vehicle motion
     x[:, k] = rk_four(vehicle.f, x[:, k - 1], u[:, k - 1], T)
@@ -79,7 +84,7 @@ for k in range(1, N):
         [
             [0, 0, -V_F_DES*np.cos(PHI_DES)*np.sin(THETA_DES), -V_F_DES*np.sin(PHI_DES)*np.cos(THETA_DES)],
             [0, 0,  V_F_DES*np.cos(PHI_DES)*np.cos(THETA_DES), -V_F_DES*np.sin(PHI_DES)*np.sin(THETA_DES)],
-            [0, 0,                                          0,  V_F_DES*np.cos(PHI_DES)/ELL_T],
+            [0, 0,                                          0,  V_F_DES*np.cos(PHI_DES)/l],
             [0, 0, 0, 0]
         ]
     )
@@ -87,57 +92,77 @@ for k in range(1, N):
         [
             [np.cos(PHI_DES)*np.cos(THETA_DES), 0],
             [np.cos(PHI_DES)*np.sin(THETA_DES), 0],
-            [            np.sin(PHI_DES)/ELL_T, 0],
+            [            np.sin(PHI_DES)/l, 0],
             [                                0, 1]
         ]
     )
 
     # Compute the gain matrix to place poles of (A - BK) at p
-    p = [-1.0, -2.0, -0.2, -0.5]
+    p = [-2.0, -1.5, -0.5, -0.5]
+    # p = [-0.5, -1.0, -1.5, -2.0]           # Low-speed
+    # p = [-1.0, -1.5, -2.0, -3.0]           # Moderate response
     K = signal.place_poles(A, B, p)
 
     # Compute the controls (v_F, v_2)
     u[:, k] = u_d[:, k] - K.gain_matrix @ (x[:, k - 1] - x_d[:, k - 1])
+    # print(f"[INFO] Speed input: {}")
 
+print(f"[INFO] Simulation complete.")
 ### MAKE PLOTS ###
 # Change some plot settings (optional)
-# plt.rc("text", usetex=True)
-# plt.rc("text.latex", preamble=r"\usepackage{cmbright,amsmath,bm}")
-# plt.rc("savefig", format="pdf")
-# plt.rc("savefig", bbox="tight")
+plt.rc("text", usetex=True)
+plt.rc("text.latex", preamble=r"\usepackage{cmbright,amsmath,bm}")
+plt.rc("savefig", format="pdf")
+plt.rc("savefig", bbox="tight")
 
 # Plot the states as a function of time
 fig1 = plt.figure(1)
-fig1.set_figheight(6.4)
-ax1a = plt.subplot(411)
+fig1.set_figheight(7.5)
+
+ax1a = plt.subplot(611)
 plt.plot(t, x_d[0, :], "C1--")
 plt.plot(t, x[0, :], "C0")
 plt.grid(color="0.95")
 plt.ylabel(r"$x$ [m]")
 plt.setp(ax1a, xticklabels=[])
 plt.legend(["Desired", "Actual"])
-ax1b = plt.subplot(412)
+
+ax1b = plt.subplot(612)
 plt.plot(t, x_d[1, :], "C1--")
 plt.plot(t, x[1, :], "C0")
 plt.grid(color="0.95")
 plt.ylabel(r"$y$ [m]")
 plt.setp(ax1b, xticklabels=[])
-ax1c = plt.subplot(413)
+
+ax1c = plt.subplot(613)
 plt.plot(t, x_d[2, :] * 180.0 / np.pi, "C1--")
 plt.plot(t, x[2, :] * 180.0 / np.pi, "C0")
 plt.grid(color="0.95")
 plt.ylabel(r"$\theta$ [deg]")
 plt.setp(ax1c, xticklabels=[])
-ax1d = plt.subplot(414)
-plt.step(t, u[0, :], "C2", where="post", label="$v_L$")
-plt.step(t, u[1, :], "C3", where="post", label="$v_R$")
+
+ax1d = plt.subplot(614)
+plt.plot(t, x_d[3, :] * 180.0 / np.pi, "C1--")
+plt.plot(t, x[3, :] * 180.0 / np.pi, "C0")
 plt.grid(color="0.95")
-plt.ylabel(r"$\bm{u}$ [m/s]")
+plt.ylabel(r"$\phi$ [deg]")
+plt.setp(ax1d, xticklabels=[])
+
+ax1e = plt.subplot(615)
+plt.step(t, u[0, :], "C2", where="post", label="$v_F$")
+plt.grid(color="0.95")
+plt.ylabel(r"$\bm{u}_1$ [m/s]")
 plt.xlabel(r"$t$ [s]")
-plt.legend()
+plt.setp(ax1e, xticklabels=[])
+
+ax1f = plt.subplot(616)
+plt.step(t, u[1, :], "C3", where="post", label="$v_2$")
+plt.grid(color="0.95")
+plt.ylabel(r"$\bm{u}_2$ [rad/s]")
+plt.xlabel(r"$t$ [s]")
 
 # Save the plot
-# plt.savefig("control_approx_linearization_fig1.pdf")
+plt.savefig("control_approx_linearization_fig1.pdf")
 
 # Plot the position of the vehicle in the plane
 fig2 = plt.figure(2)
@@ -161,20 +186,7 @@ plt.ylabel(r"$y$ [m]")
 plt.legend()
 
 # Save the plot
-# plt.savefig("control_approx_linearization_fig2.pdf")
+plt.savefig("control_approx_linearization_fig2.pdf")
 
 # Show the plots to the screen
-plt.show()
-
-### MAKE AN ANIMATION ###
-
-# Create the animation
-ani = vehicle.animate_trajectory(x, x_d, T)
-
-# Create and save the animation
-# ani = vehicle.animate_trajectory(
-#     x, x_d, T, True, "../agv-book/gifs/ch4/control_approx_linearization.gif"
-# )
-
-# Show all the plots to the screen
 plt.show()
