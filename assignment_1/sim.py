@@ -19,7 +19,7 @@ n = 4
 m = 2
 
 # Set the simulation time [s] and the sample period [s]
-SIM_TIME = 10.0
+SIM_TIME = 15.0
 T = 0.04
 
 # Create an array of time values [s]
@@ -67,8 +67,8 @@ vehicle = FourWheelSteered(ELL_W, ELL_T, l)
 
 ### SIMULATE THE CLOSED-LOOP SYSTEM ###
 # initial conditions
-q_0 = np.array([0, 0, 3*np.pi/2.0, 0])
-
+# q_0 = np.array([0, 0, 3*np.pi/2.0, 0]) # Question d) stable
+q_0 = np.array([60, 0, 3.5*np.pi/2.0, 0]) # Question e) unstable
 # Setup some arrays
 x = np.zeros((n, N))
 u = np.zeros((m, N))
@@ -162,7 +162,7 @@ plt.ylabel(r"$\bm{u}_2$ [rad/s]")
 plt.xlabel(r"$t$ [s]")
 
 # Save the plot
-plt.savefig("control_approx_linearization_fig1.pdf")
+plt.savefig("control_unstable_fig1.pdf")
 
 # Plot the position of the vehicle in the plane
 fig2 = plt.figure(2)
@@ -186,7 +186,7 @@ plt.ylabel(r"$y$ [m]")
 plt.legend()
 
 # Save the plot
-plt.savefig("control_approx_linearization_fig2.pdf")
+plt.savefig("control_unstable_fig2.pdf")
 
 # Show the plots to the screen
 plt.show()
