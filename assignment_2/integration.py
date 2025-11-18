@@ -1,10 +1,3 @@
-"""
-Python module integration.py for numerical integration routines.
-Author: Joshua A. Marshall <joshua.marshall@queensu.ca>
-GitHub: https://github.com/botprof/agv-examples
-"""
-
-
 def rk_four(f, x, u, T):
     """
     Perform fourth-order Runge-Kutta numerical integration.

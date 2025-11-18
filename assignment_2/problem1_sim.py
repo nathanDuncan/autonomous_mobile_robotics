@@ -1,7 +1,10 @@
 """
-Example fws_beacons_observer.py
-Author: Joshua A. Marshall <joshua.marshall@queensu.ca>
-GitHub: https://github.com/botprof/agv-examples
+Simulation of a Luenberger-like observer for a differential drive robot.
+Author: Nathan Duncan <20ntd1@queensu.ca>
+ADAPTED FROM:
+    Example fws_beacons_observer.py
+    Author: Joshua A. Marshall <joshua.marshall@queensu.ca>
+    GitHub: https://github.com/botprof/agv-examples 
 """
 
 # %%
@@ -21,6 +24,10 @@ T = 0.1
 t = np.arange(0.0, SIM_TIME, T)
 N = np.size(t)
 
+# Noise Flag
+NOISE = True
+sigma = np.sqrt(0.02)  # Standard deviation from sigma^2 = 0.02
+
 # %%
 # VEHICLE SETUP
 
@@ -31,16 +38,20 @@ ELL_T = 0.25
 # Let's now use the class Differential Drive for plotting
 vehicle = DiffDrive(ELL_W)
 
+# Desired inputs for the specified trajectory
+v_L_des = 1.95/8.0 # m/s
+v_R_des = 2.05/8.0 # m/s 
+
 # %%
 # CREATE A MAP OF FEATURES
 
 # Set the minimum number of features in the map that achieves observability
-N_BEACONS = 2
+N_BEACONS = 10
 
 # Set the size [m] of a square map
 D_MAP = 30.0
 
-# Create a map of randomly placed feature locations
+# Create a map of randomly placed feature locations (first two have know locations)
 f_map = np.zeros((2, N_BEACONS))
 f_map[:, 0] = (3.0, 4.0)
 f_map[:, 1] = (-7.0, 3.0)
@@ -48,9 +59,9 @@ if N_BEACONS > 2:
     for i in range(2, N_BEACONS):
         f_map[:, i] = D_MAP * (np.random.rand(2) - 0.5)
 
+
 # %%
 # FUNCTION TO MODEL RANGE TO FEATURES
-
 
 def range_sensor(q, f_map):
     """
@@ -73,6 +84,9 @@ def range_sensor(q, f_map):
     r = np.zeros(N_BEACONS)
     for j in range(0, N_BEACONS):
         r[j] = np.sqrt((f_map[0, j] - q[0]) ** 2 + (f_map[1, j] - q[1]) ** 2)
+        if NOISE:
+            epsilon = np.random.randn()    # draw from N(0,1)
+            r[j] = r[j] + sigma * epsilon
 
     # Return the array of measurements
     return r
@@ -80,7 +94,6 @@ def range_sensor(q, f_map):
 
 # %%
 # FUNCTION TO IMPLEMENT THE OBSERVER
-
 
 def fws_observer(q, u, r, f_map):
     """
@@ -142,9 +155,11 @@ def fws_observer(q, u, r, f_map):
     # Set the desired poles at lambda_z (change these as desired)
     lambda_z = np.array([0.9, 0.8, 0.7])
     # Compute the observer gain
-    L = signal.place_poles(F.T, H.T, lambda_z).gain_matrix.T
-    # Use the pseudo-inverse to compute the observer gain (when overdetermined)
-    # L = signal.place_poles(F.T, np.eye(4), lambda_z).gain_matrix @ np.linalg.pinv(H)
+    if N_BEACONS > 2:
+        # Use the pseudo-inverse to compute the observer gain (when overdetermined)
+        L = signal.place_poles(F.T, np.eye(3), lambda_z).gain_matrix @ np.linalg.pinv(H)
+    else:
+        L = signal.place_poles(F.T, H.T, lambda_z).gain_matrix.T
 
     # Predict the state using the inputs and the robot's kinematic model
     q_new = q + T * vehicle.f(q, u)
@@ -167,8 +182,8 @@ q_hat = np.zeros((3, N))
 q[0, 0] = 3.0
 q[1, 0] = -2.0
 q[2, 0] = -np.pi / 6.0
-u[0, 0] = 1.0
-u[1, 0] = 0.0
+u[0, 0] = v_L_des
+u[1, 0] = v_R_des
 
 # Just drive around and try to localize!
 for k in range(1, N):
@@ -177,20 +192,19 @@ for k in range(1, N):
     # Use the range measurements to estimate the robot's state
     q_hat[:, k] = fws_observer(q_hat[:, k - 1], u[:, k - 1], r, f_map)
     # Choose some new inputs
-    u[0, k] = 1.5
-    u[1, k] = 1.0
+    u[0, k] = v_L_des
+    u[1, k] = v_R_des
+
     # Simulate the robot's motion
     q[:, k] = rk_four(vehicle.f, q[:, k - 1], u[:, k - 1], T)
 
 # %%
 # MAKE SOME PLOTS
 
-
 # Function to wrap angles to [-pi, pi]
 def wrap_to_pi(angle):
     """Wrap angles to the range [-pi, pi]."""
     return (angle + np.pi) % (2 * np.pi) - np.pi
-
 
 # Change some plot settings (optional)
 plt.rc("text", usetex=True)
@@ -216,6 +230,7 @@ plt.fill(X_BD, Y_BD, "C3", alpha=0.5, label="End")
 plt.xlabel(r"$x$ [m]")
 plt.ylabel(r"$y$ [m]")
 plt.legend()
+fig1.savefig("vehicle_position.png", dpi=300, bbox_inches="tight")
 
 # Plot the states as a function of time
 fig2 = plt.figure(2)
@@ -227,19 +242,20 @@ plt.grid(color="0.95")
 plt.ylabel(r"$x$ [m]")
 plt.setp(ax2a, xticklabels=[])
 plt.legend()
-ax2b = plt.subplot(412)
+ax2b = plt.subplot(312)
 plt.plot(t, q[1, :], "C0", label="Actual")
 plt.plot(t, q_hat[1, :], "C1--", label="Estimated")
 plt.grid(color="0.95")
 plt.ylabel(r"$y$ [m]")
 plt.setp(ax2b, xticklabels=[])
-ax2c = plt.subplot(413)
+ax2c = plt.subplot(313)
 plt.plot(t, wrap_to_pi(q[2, :]) * 180.0 / np.pi, "C0", label="Actual")
 plt.plot(t, wrap_to_pi(q_hat[2, :]) * 180.0 / np.pi, "C1--", label="Estimated")
 plt.ylabel(r"$\theta$ [deg]")
 plt.grid(color="0.95")
-plt.setp(ax2c, xticklabels=[])
+plt.setp(ax2c)
 plt.xlabel(r"$t$ [s]")
+fig2.savefig("states_over_time.png", dpi=300, bbox_inches="tight")
 
 # Show all the plots to the screen
 plt.show()
